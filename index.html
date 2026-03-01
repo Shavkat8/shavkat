@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wave Level Indicator</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ── TOPBAR ── -->
+<div class="topbar">
+  <div class="logo">WLI</div>
+
+  <div class="search-wrap">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#354f68" stroke-width="2.5">
+      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+    </svg>
+    <input id="symInput" type="text" placeholder="Тикер… BTC, SBER, GC=F" maxlength="14" autocomplete="off" spellcheck="false"/>
+    <button class="load-btn" id="loadBtn">ЗАГРУЗИТЬ</button>
+  </div>
+
+  <!-- ── Быстрые кнопки ── -->
+  <div class="chips-wrap">
+
+    <div class="chip-group">
+      <span class="chip-label">КРИПТО</span>
+      <div class="chip type-crypto" onclick="App.load('BTCUSDT','crypto')">BTC</div>
+      <div class="chip type-crypto" onclick="App.load('ETHUSDT','crypto')">ETH</div>
+      <div class="chip type-crypto" onclick="App.load('SOLUSDT','crypto')">SOL</div>
+      <div class="chip type-crypto" onclick="App.load('BNBUSDT','crypto')">BNB</div>
+      <div class="chip type-crypto" onclick="App.load('XRPUSDT','crypto')">XRP</div>
+    </div>
+
+    <div class="chip-group">
+      <span class="chip-label">ПЕРП</span>
+      <div class="chip type-futures" onclick="App.load('BTCUSDT_PERP','crypto_perp')">BTC-P</div>
+      <div class="chip type-futures" onclick="App.load('ETHUSDT_PERP','crypto_perp')">ETH-P</div>
+    </div>
+
+    <div class="chip-group">
+      <span class="chip-label">🇷🇺 MOEX</span>
+      <div class="chip type-ru" onclick="App.load('SBER','moex')">СБЕР</div>
+      <div class="chip type-ru" onclick="App.load('GAZP','moex')">ГАЗП</div>
+      <div class="chip type-ru" onclick="App.load('LKOH','moex')">ЛУКОЙЛ</div>
+      <div class="chip type-ru" onclick="App.load('YNDX','moex')">ЯНДЕКС</div>
+      <div class="chip type-ru" onclick="App.load('ROSN','moex')">РОСНЕФТЬ</div>
+    </div>
+
+    <div class="chip-group">
+      <span class="chip-label">US</span>
+      <div class="chip" onclick="App.load('AAPL','stock')">AAPL</div>
+      <div class="chip" onclick="App.load('TSLA','stock')">TSLA</div>
+      <div class="chip" onclick="App.load('NVDA','stock')">NVDA</div>
+    </div>
+
+    <div class="chip-group">
+      <span class="chip-label">ФЬЮЧЕРСЫ</span>
+      <div class="chip type-futures" onclick="App.load('GC=F','futures')">ЗОЛОТО</div>
+      <div class="chip type-futures" onclick="App.load('CL=F','futures')">OIL WTI</div>
+      <div class="chip type-futures" onclick="App.load('BZ=F','futures')">BRENT</div>
+      <div class="chip type-futures" onclick="App.load('ES=F','futures')">S&P500</div>
+    </div>
+
+    <div class="chip-group">
+      <span class="chip-label">FOREX</span>
+      <div class="chip" onclick="App.load('EURUSD=X','forex')">EUR/USD</div>
+      <div class="chip" onclick="App.load('USDRUB=X','forex')">USD/RUB</div>
+    </div>
+
+  </div><!-- /chips-wrap -->
+
+  <div class="topbar-right">
+    <div class="status-wrap">
+      <div class="status-dot" id="statusDot"></div>
+      <div class="status-txt" id="statusTxt">OFFLINE</div>
+    </div>
+    <div>
+      <div class="price-big" id="priceBig">—</div>
+      <div class="price-change" id="priceChange">—</div>
+    </div>
+  </div>
+</div><!-- /topbar -->
+
+
+<!-- ── MAIN ── -->
+<div class="main">
+
+  <!-- CHART -->
+  <div class="chart-wrap">
+    <canvas id="chart"></canvas>
+
+    <div class="alert-banner" id="alertBanner"></div>
+
+    <div class="overlay" id="overlay">
+      <div class="logo-big">WAVE LEVEL INDICATOR</div>
+      <div class="overlay-hint">Выберите инструмент для анализа</div>
+    </div>
+
+    <div class="error-msg" id="errorMsg"></div>
+  </div><!-- /chart-wrap -->
+
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <!-- Таймфреймы -->
+    <div class="tf-row">
+      <span class="tf-label-txt">ТФ</span>
+      <button class="tf-btn" data-tf="1m">1М</button>
+      <button class="tf-btn" data-tf="5m">5М</button>
+      <button class="tf-btn" data-tf="15m">15М</button>
+      <button class="tf-btn" data-tf="30m">30М</button>
+      <button class="tf-btn" data-tf="1h">1Ч</button>
+      <button class="tf-btn" data-tf="4h">4Ч</button>
+      <button class="tf-btn" data-tf="1d">1Д</button>
+      <span id="currentTF">5М</span>
+    </div>
+
+    <!-- Инструмент -->
+    <div class="sym-info" id="symInfo">Инструмент не выбран</div>
+
+    <!-- Кнопки управления -->
+    <div class="btn-row">
+      <button class="ctrl-btn active" id="btnPause">⏸ ПАУЗА</button>
+      <button class="ctrl-btn" id="btnReset">↺ УРОВНИ</button>
+    </div>
+
+    <div class="sidebar-scroll">
+
+      <!-- Настройки -->
+      <div class="sb-section">
+        <div class="sb-title">Настройки уровней</div>
+
+        <div class="srow">
+          Мин. касаний
+          <span class="sval">
+            <input type="range" min="2" max="6" value="2" id="slMinT">
+            <span id="valMinT">2</span>
+          </span>
+        </div>
+
+        <div class="srow">
+          Размер зоны
+          <span class="sval">
+            <input type="range" min="1" max="20" value="3" id="slZone">
+            <span id="valZone">0.3</span>%
+          </span>
+        </div>
+
+        <div class="srow">
+          Пивот (баров)
+          <span class="sval">
+            <input type="range" min="2" max="15" value="5" id="slPivot">
+            <span id="valPivot">5</span>
+          </span>
+        </div>
+
+        <div class="sb-title" style="margin-top:10px">Алерт и пробой</div>
+
+        <div class="srow">
+          Зона алерта
+          <span class="sval">
+            <input type="range" min="1" max="20" value="5" id="slAlert">
+            <span id="valAlert">0.5</span>%
+          </span>
+        </div>
+
+        <div class="srow">
+          Порог пробоя
+          <span class="sval">
+            <input type="range" min="1" max="20" value="2" id="slBreak">
+            <span id="valBreak">0.2</span>%
+          </span>
+        </div>
+      </div>
+
+      <!-- Статистика -->
+      <div class="sb-section">
+        <div class="sb-title">Статистика</div>
+        <div class="stat-grid">
+          <div class="stat-box">
+            <div class="stat-lbl">Уровней</div>
+            <div class="stat-val" id="stLevels">0</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-lbl">Макс. каc.</div>
+            <div class="stat-val" id="stMaxT">0</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-lbl">Поддержек</div>
+            <div class="stat-val" id="stSup" style="color:var(--green)">0</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-lbl">Сопротивл.</div>
+            <div class="stat-val" id="stRes" style="color:var(--red)">0</div>
+          </div>
+          <div class="stat-box" style="grid-column:1/-1">
+            <div class="stat-lbl">Пробитых</div>
+            <div class="stat-val" id="stBroken" style="color:var(--gray)">0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Список уровней -->
+      <div class="sb-section">
+        <div class="sb-title">Активные уровни</div>
+        <div id="levelsList">
+          <div class="no-lvl">Загрузите инструмент</div>
+        </div>
+      </div>
+
+    </div><!-- /sidebar-scroll -->
+  </div><!-- /sidebar -->
+
+</div><!-- /main -->
+
+<!-- ── SCRIPTS ── (порядок важен: config → data → levels → chart → ui → app) -->
+<script src="js/config.js"></script>
+<script src="js/data.js"></script>
+<script src="js/levels.js"></script>
+<script src="js/chart.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>
