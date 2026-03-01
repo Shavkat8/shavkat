@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spread Arbitrage — MOEX</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,600;0,700;1,400&family=Bebas+Neue&display=swap');
+:root{
+  --bg:#0b0e17;--panel:#0f1320;--b1:#161d2e;--b2:#1e2a40;--b3:#243350;
+  --green:#26a69a;--red:#ef5350;--blue:#42a5f5;--yellow:#ffa726;--purple:#ab47bc;
+  --t1:#1e2d42;--t2:#3d5a75;--t3:#6b8fa8;--t4:#c5d8e8;--t5:#e8f0f7;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--t4);font-family:'JetBrains Mono',monospace;display:flex;flex-direction:column}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--b3);border-radius:2px}
+
+/* TOPBAR */
+.topbar{
+  height:44px;flex-shrink:0;background:var(--panel);border-bottom:1px solid var(--b1);
+  display:flex;align-items:center;padding:0 10px;gap:7px;z-index:50;
+  overflow-x:auto;overflow-y:hidden;white-space:nowrap;
+}
+.topbar::-webkit-scrollbar{display:none}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:4px;color:var(--blue);flex-shrink:0}
+.pair-disp{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.pair-sym{font-size:14px;font-weight:700;color:var(--t5);letter-spacing:.5px}
+.pair-div{color:var(--t2);font-size:12px}
+.pair-tf{font-size:8px;color:var(--t2);letter-spacing:1px}
+.ohlc-bar{display:flex;align-items:center;gap:7px;font-size:10px;flex-shrink:0}
+.ohlc-item{display:flex;align-items:center;gap:2px}
+.ol{color:var(--t2);font-size:8px;letter-spacing:.5px}
+.ov{color:var(--t4);font-weight:600}
+.ov.up{color:var(--green)}.ov.dn{color:var(--red)}
+.sep-v{width:1px;height:22px;background:var(--b2);flex-shrink:0}
+.ind-bar{display:flex;align-items:center;gap:3px;flex-shrink:0}
+.ind-btn{
+  padding:2px 7px;border:1px solid var(--b2);background:transparent;
+  color:var(--t2);font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;
+  cursor:pointer;border-radius:2px;transition:all .12s;letter-spacing:.5px;
+}
+.ind-btn.ma.on{border-color:var(--yellow);color:var(--yellow);background:rgba(255,167,38,.08)}
+.ind-btn.bb.on{border-color:var(--purple);color:var(--purple);background:rgba(171,71,188,.08)}
+.tf-bar{display:flex;align-items:center;gap:2px;flex-shrink:0}
+.tf-btn{
+  padding:2px 8px;border:1px solid transparent;background:transparent;
+  color:var(--t2);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;
+  cursor:pointer;border-radius:2px;transition:all .12s;
+}
+.tf-btn:hover{color:var(--t4);background:var(--b1)}
+.tf-btn.act{color:var(--blue);border-color:rgba(66,165,245,.35);background:rgba(66,165,245,.08)}
+.custom-pair{
+  display:flex;align-items:center;gap:3px;background:var(--b1);
+  border:1px solid var(--b2);border-radius:3px;padding:0 7px;height:28px;flex-shrink:0;
+}
+.custom-pair input{
+  background:transparent;border:none;outline:none;color:var(--t4);
+  font-family:'JetBrains Mono',monospace;font-size:10px;width:55px;
+  text-transform:uppercase;letter-spacing:.5px;
+}
+.custom-pair input::placeholder{color:var(--t2);font-size:9px;text-transform:none;letter-spacing:0}
+.csep{color:var(--t2);font-size:11px;font-weight:700}
+.btn-go{
+  background:rgba(66,165,245,.1);border:1px solid rgba(66,165,245,.25);color:var(--blue);
+  font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:1px;
+  padding:3px 8px;border-radius:2px;cursor:pointer;transition:all .12s;flex-shrink:0;
+}
+.btn-go:hover{background:rgba(66,165,245,.2)}
+.status-area{margin-left:auto;display:flex;align-items:center;gap:7px;flex-shrink:0}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--t1);transition:background .3s}
+.dot.poll{background:var(--green);animation:blink 2.5s infinite}
+.dot.loading{background:var(--blue);animation:blink .4s infinite}
+.dot.err{background:var(--red)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
+.stxt{font-size:8px;color:var(--t2);letter-spacing:2px}
+.snum{font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--t4);letter-spacing:1px}
+.snum.up{color:var(--green)}.snum.dn{color:var(--red)}
+.schg{font-size:8px;color:var(--t2);text-align:right}
+.schg.up{color:var(--green)}.schg.dn{color:var(--red)}
+
+/* MAIN */
+.main{flex:1;display:flex;overflow:hidden;min-height:0}
+.chart-wrap{flex:1;position:relative;overflow:hidden;min-width:0;background:var(--bg)}
+#cvs{display:block;width:100%;height:100%;cursor:crosshair}
+
+/* Overlay */
+.overlay{
+  position:absolute;inset:0;background:rgba(11,14,23,.94);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+  z-index:30;transition:opacity .3s;
+}
+.overlay.gone{opacity:0;pointer-events:none}
+.ovr-title{font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:6px;color:rgba(66,165,245,.08)}
+.ovr-hint{font-size:10px;color:var(--t2);letter-spacing:2px}
+.ovr-msg{font-size:10px;color:var(--t3);letter-spacing:.5px;text-align:center;line-height:1.8;max-width:420px}
+.spin{width:26px;height:26px;border:2px solid var(--b2);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#errBox{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  background:rgba(239,83,80,.06);border:1px solid rgba(239,83,80,.5);color:var(--red);
+  padding:10px 20px;border-radius:3px;font-size:10px;z-index:40;
+  display:none;text-align:center;max-width:480px;line-height:1.9;
+}
+.tip{
+  position:absolute;background:rgba(12,16,28,.97);border:1px solid var(--b3);
+  padding:5px 10px;font-size:10px;border-radius:3px;pointer-events:none;
+  z-index:20;display:none;white-space:nowrap;line-height:1.8;
+}
+
+/* SIDEBAR */
+.sidebar{width:200px;flex-shrink:0;background:var(--panel);border-left:1px solid var(--b1);display:flex;flex-direction:column;overflow:hidden}
+.sb-head{
+  padding:6px 10px;border-bottom:1px solid var(--b1);font-size:8px;letter-spacing:2px;
+  text-transform:uppercase;color:var(--t2);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+}
+.sb-cnt{color:var(--t1);font-size:7px}
+.pair-list{flex:1;overflow-y:auto;overflow-x:hidden}
+.pair-row{
+  display:flex;align-items:center;padding:4px 8px;
+  border-bottom:1px solid rgba(22,29,46,.6);cursor:pointer;transition:background .1s;gap:4px;
+}
+.pair-row:hover{background:rgba(22,29,46,.9)}
+.pair-row.act{background:rgba(66,165,245,.07);border-left:2px solid var(--blue);padding-left:6px}
+.pair-row.act .pname{color:var(--t5)}
+.pname{font-size:10px;font-weight:700;color:var(--t3);letter-spacing:.2px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pname .s{color:var(--t1);margin:0 1px}
+.pval{font-size:10px;font-weight:700;color:var(--t2);text-align:right;flex-shrink:0;min-width:42px}
+.pval.up{color:var(--green)}.pval.dn{color:var(--red)}
+.ppct{font-size:8px;color:var(--t1);text-align:right;flex-shrink:0;min-width:34px}
+.ppct.up{color:rgba(38,166,154,.6)}.ppct.dn{color:rgba(239,83,80,.6)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">SPREAD</div>
+  <div class="pair-disp">
+    <span class="pair-sym" id="dA">—</span>
+    <span class="pair-div">/</span>
+    <span class="pair-sym" id="dB">—</span>
+    <span class="pair-tf" id="dTF">· MOEX</span>
+  </div>
+  <div class="ohlc-bar" id="ohlcBar" style="display:none">
+    <div class="ohlc-item"><span class="ol">О</span><span class="ov" id="oO">—</span></div>
+    <div class="ohlc-item"><span class="ol">В</span><span class="ov" id="oH">—</span></div>
+    <div class="ohlc-item"><span class="ol">Н</span><span class="ov" id="oL">—</span></div>
+    <div class="ohlc-item"><span class="ol">З</span><span class="ov" id="oC">—</span></div>
+    <div class="ohlc-item"><span class="ol">ИЗМ</span><span class="ov" id="oCh">—</span></div>
+  </div>
+  <div class="sep-v"></div>
+  <div class="ind-bar">
+    <button class="ind-btn ma on" id="btnMA" onclick="toggleInd('ma')">MA 200</button>
+    <button class="ind-btn bb on" id="btnBB" onclick="toggleInd('bb')">BB 20</button>
+  </div>
+  <div class="sep-v"></div>
+  <div class="tf-bar">
+    <button class="tf-btn" data-tf="1m">1М</button>
+    <button class="tf-btn" data-tf="5m">5М</button>
+    <button class="tf-btn" data-tf="15m">15М</button>
+    <button class="tf-btn" data-tf="30m">30М</button>
+    <button class="tf-btn" data-tf="1h">1Ч</button>
+    <button class="tf-btn" data-tf="4h">4Ч</button>
+    <button class="tf-btn act" data-tf="1d">1Д</button>
+  </div>
+  <div class="custom-pair">
+    <input id="inpA" placeholder="SYM A" maxlength="10" autocomplete="off" spellcheck="false">
+    <span class="csep">/</span>
+    <input id="inpB" placeholder="SYM B" maxlength="10" autocomplete="off" spellcheck="false">
+    <button class="btn-go" id="btnGo">GO</button>
+  </div>
+  <div class="status-area">
+    <div class="dot" id="dot"></div>
+    <div class="stxt" id="stxt">OFFLINE</div>
+    <div><div class="snum" id="snum">—</div><div class="schg" id="schg">—</div></div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="chart-wrap">
+    <canvas id="cvs"></canvas>
+    <div class="overlay" id="overlay">
+      <div class="ovr-title">SPREAD ARB</div>
+      <div class="ovr-hint">← Выберите пару из списка</div>
+    </div>
+    <div id="errBox"></div>
+    <div class="tip" id="tip"></div>
+  </div>
+  <div class="sidebar">
+    <div class="sb-head">ПАРЫ MOEX <span class="sb-cnt" id="sbCnt"></span></div>
+    <div class="pair-list" id="pairList"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ════════════════════════════════════════════
+// ПАРЫ АРБИТРАЖА (полный список)
+// ════════════════════════════════════════════
+const PAIRS = [
+  // Обычные / привилегированные
+  ['SBER',  'SBERP' ],
+  ['TATN',  'TATNP' ],
+  ['SNGS',  'SNGSP' ],
+  ['RTKM',  'RTKMP' ],
+  ['MTLR',  'MTLRP' ],
+  // Нефть и газ
+  ['LKOH',  'NVTK'  ],
+  ['ROSN',  'TATN'  ],
+  ['TATN',  'LKOH'  ],
+  ['NVTK',  'SIBN'  ],
+  ['TRNFP', 'SIBN'  ],
+  ['ROSN',  'RNFT'  ],
+  ['ROSN',  'BANEP' ],
+  // Металлурги
+  ['NLMK',  'CHMF'  ],
+  ['MAGN',  'NLMK'  ],
+  ['MAGN',  'CHMF'  ],
+  ['MAGN',  'RUAL'  ],
+  ['RUAL',  'CHMF'  ],
+  ['RUAL',  'ALRS'  ],
+  ['GMKN',  'RUAL'  ],
+  ['GMKN',  'CHMF'  ],
+  ['GMKN',  'ALRS'  ],
+  // Электроэнергетика
+  ['HYDR',  'FEES'  ],
+  ['FEES',  'HYDR'  ],
+  ['IRAO',  'FEES'  ],
+  ['IRAO',  'HYDR'  ],
+  ['IRAO',  'OGKB'  ],
+  ['FEES',  'FLOT'  ],
+  // Финансы / банки
+  ['SBER',  'VTBR'  ],
+  ['VTBR',  'TCSG'  ],
+  ['MOEX',  'SPBE'  ],
+  // Телеком
+  ['MTSS',  'RTKM'  ],
+  ['MTSS',  'AFKS'  ],
+  // Ритейл / IT
+  ['MGNT',  'FIXP'  ],
+  ['OZON',  'MGNT'  ],
+  ['SOFL',  'ASTR'  ],
+  ['YDEX',  'SBER'  ],
+  // Транспорт
+  ['GLTR',  'FLOT'  ],
+  // АПК
+  ['AGRO',  'PHOR'  ],
+  // Золото / сырьё
+  ['POLY',  'PLZL'  ],
+  // Холдинги
+  ['AFKS',  'SGZH'  ],
+  ['SGZH',  'AFKS'  ],
+];
+
+// ════════════════════════════════════════════
+// ТАЙМФРЕЙМЫ
+// MOEX ISS: 1=1мин, 10=10мин, 60=1ч, 24=1д, 7=1нед
+// 5м/15м агрегируем из 1мин; 30м из 10мин; 4ч из 1ч
+// ════════════════════════════════════════════
+const TF = {
+  '1m':  { label:'1М',  moex:1,  days:3,   agg:null },
+  '5m':  { label:'5М',  moex:1,  days:5,   agg:5    },
+  '15m': { label:'15М', moex:1,  days:10,  agg:15   },
+  '30m': { label:'30М', moex:10, days:15,  agg:3    },
+  '1h':  { label:'1Ч',  moex:60, days:30,  agg:null },
+  '4h':  { label:'4Ч',  moex:60, days:90,  agg:4    },
+  '1d':  { label:'1Д',  moex:24, days:365, agg:null },
+};
+
+const CFG = { cw:8, gap:1, lw:68, maxBars:700 };
+const IND = { ma:true, bb:true };
+
+// ════════════════════════════════════════════
+// УТИЛИТЫ
+// ════════════════════════════════════════════
+function fmt(v){
+  if(v==null||isNaN(v))return'—';
+  const a=Math.abs(v);
+  if(a===0)return'0';
+  if(a<0.0001)return v.toFixed(6);
+  if(a<0.001) return v.toFixed(5);
+  if(a<0.1)   return v.toFixed(4);
+  if(a<10)    return v.toFixed(4);
+  if(a<1000)  return v.toFixed(3);
+  return v.toFixed(2);
+}
+function fmtDate(ms,tf){
+  const d=new Date(ms);
+  if(tf==='1d'||tf==='1w')return`${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}`;
+  return`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function today(){return new Date().toISOString().slice(0,10)}
+function daysAgo(n){const d=new Date();d.setDate(d.getDate()-n);return d.toISOString().slice(0,10)}
+function aggregate(arr,n){
+  if(!n||n<=1)return arr;
+  const r=[];
+  for(let i=0;i<arr.length;i+=n){
+    const c=arr.slice(i,i+n);
+    if(!c.length)continue;
+    r.push({t:c[0].t,o:c[0].o,h:Math.max(...c.map(x=>x.h)),l:Math.min(...c.map(x=>x.l)),c:c[c.length-1].c});
+  }
+  return r;
+}
+function sma(data,period){
+  const out=new Array(data.length).fill(null);
+  let sum=0;
+  for(let i=0;i<data.length;i++){
+    sum+=data[i];
+    if(i>=period)sum-=data[i-period];
+    if(i>=period-1)out[i]=sum/period;
+  }
+  return out;
+}
+function bollinger(closes,period,sigmas){
+  const mid=sma(closes,period);
+  return mid.map((m,i)=>{
+    if(m===null)return null;
+    let v=0;
+    for(let j=i-period+1;j<=i;j++)v+=(closes[j]-m)**2;
+    const sd=Math.sqrt(v/period);
+    const b={mid:m};
+    sigmas.forEach(k=>{b[`u${k}`]=m+k*sd;b[`l${k}`]=m-k*sd;});
+    return b;
+  });
+}
+
+// ════════════════════════════════════════════
+// ЗАГРУЗЧИК MOEX
+//
+// СТРАТЕГИЯ (по приоритету скорости):
+// 1. JSONP через <script> тег — напрямую с MOEX, без CORS, ~0.5-1с
+// 2. fetch allorigins.win   — прокси-обёртка, ~1-3с
+// 3. fetch corsproxy.io     — резерв
+// 4. fetch api.codetabs.com — резерв
+//
+// Параллельный запуск 1+2+3+4 → берём первый успешный ответ
+// Кэш 25 сек + дедупликация параллельных запросов
+// ════════════════════════════════════════════
+const Loader = (() => {
+  const _cache={};   // cacheKey → {ts, data}
+  const _infly={};   // cacheKey → Promise
+  const _polls={};
+  const CACHE_MS=25000;
+  let _cbId=0;
+
+  // ── Публичный API ─────────────────────────
+
+  async function fetchPair(symA,symB,tfKey,onData,onStatus){
+    _clearPoll('main');
+    const tfc=TF[tfKey]||TF['1d'];
+    onStatus('loading');
+    try{
+      const[cA,cB]=await Promise.all([_getSym(symA,tfc),_getSym(symB,tfc)]);
+      const spread=_buildSpread(cA,cB);
+      if(!spread.length)throw new Error(`Нет совпадающих баров для ${symA}/${symB}`);
+      onData(spread,symA,symB,tfKey);
+      onStatus('poll');
+      _polls['main']=setInterval(async()=>{
+        try{
+          const[fA,fB]=await Promise.all([_getSym(symA,tfc,true),_getSym(symB,tfc,true)]);
+          const s=_buildSpread(fA,fB);
+          if(s.length)onData(s,symA,symB,tfKey);
+        }catch(_){}
+      },30000);
+    }catch(e){
+      onStatus('err');
+      throw e;
+    }
+  }
+
+  function stopAll(){Object.keys(_polls).forEach(k=>_clearPoll(k));}
+
+  // ── Кэш + дедупликация ────────────────────
+
+  async function _getSym(sym,tfc,force=false){
+    const key=`${sym}|${tfc.moex}|${tfc.days}|${tfc.agg||0}`;
+    const now=Date.now();
+    if(!force&&_cache[key]&&now-_cache[key].ts<CACHE_MS)return _cache[key].data;
+    if(_infly[key])return _infly[key];
+    _infly[key]=_loadSym(sym,tfc).finally(()=>delete _infly[key]);
+    const data=await _infly[key];
+    _cache[key]={ts:Date.now(),data};
+    return data;
+  }
+
+  async function _loadSym(sym,tfc){
+    let raw=await _moexFetchAll(sym,tfc.moex,daysAgo(tfc.days),today());
+    if(tfc.agg&&tfc.agg>1)raw=aggregate(raw,tfc.agg);
+    return raw.slice(-CFG.maxBars);
+  }
+
+  // ── MOEX ISS с пагинацией ─────────────────
+
+  async function _moexFetchAll(sym,interval,from,till){
+    const PAGE=500;
+    let all=[],start=0;
+    for(let p=0;p<5;p++){
+      const batch=await _fetchPage(sym,interval,from,till,start);
+      if(!batch||!batch.length)break;
+      all=all.concat(batch);
+      if(batch.length<PAGE)break;
+      start+=PAGE;
+    }
+    const seen=new Set();
+    return all
+      .filter(c=>{if(seen.has(c.t))return false;seen.add(c.t);return true;})
+      .sort((a,b)=>a.t-b.t);
+  }
+
+  // Одна страница: JSONP + 3 прокси в параллельной гонке
+  async function _fetchPage(sym,interval,from,till,start){
+    const moexUrl=
+      `https://iss.moex.com/iss/engines/stock/markets/shares/securities/`+
+      `${encodeURIComponent(sym)}/candles.json`+
+      `?interval=${interval}&from=${from}&till=${till}&start=${start}&iss.meta=off`;
+
+    // Источники данных (все стартуют параллельно)
+    const sources=[
+      // 1. JSONP — напрямую с MOEX, без прокси, самый быстрый
+      ()=>_jsonp(moexUrl),
+      // 2. allorigins — надёжный прокси
+      ()=>_proxy(
+        `https://api.allorigins.win/get?url=${encodeURIComponent(moexUrl)}`,
+        async r=>{const j=await r.json();if(!j?.contents)throw new Error('ao empty');return typeof j.contents==='string'?JSON.parse(j.contents):j.contents;}
+      ),
+      // 3. corsproxy.io
+      ()=>_proxy(
+        `https://corsproxy.io/?url=${encodeURIComponent(moexUrl)}`,
+        r=>r.json()
+      ),
+      // 4. codetabs
+      ()=>_proxy(
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(moexUrl)}`,
+        r=>r.json()
+      ),
+    ];
+
+    return _race(sources);
+  }
+
+  // ── JSONP через <script> тег ──────────────
+  // Обходит CORS полностью — MOEX ISS поддерживает ?callback=
+  function _jsonp(baseUrl){
+    return new Promise((resolve,reject)=>{
+      const cb='_moexCb'+(_cbId++);
+      const url=baseUrl+(baseUrl.includes('?')?'&':'?')+`callback=${cb}`;
+      const script=document.createElement('script');
+      const timer=setTimeout(()=>{cleanup();reject(new Error('JSONP timeout'));},10000);
+
+      window[cb]=function(data){
+        cleanup();
+        try{
+          const candles=_parse(data);
+          if(candles!==null)resolve(candles);
+          else reject(new Error('JSONP parse fail'));
+        }catch(e){reject(e);}
+      };
+
+      function cleanup(){
+        clearTimeout(timer);
+        delete window[cb];
+        if(script.parentNode)script.parentNode.removeChild(script);
+      }
+
+      script.onerror=()=>{cleanup();reject(new Error('JSONP script error'));};
+      script.src=url;
+      document.head.appendChild(script);
+    });
+  }
+
+  // ── fetch-прокси с таймаутом ──────────────
+  function _proxy(url,unwrap){
+    return new Promise((resolve,reject)=>{
+      const ctrl=new AbortController();
+      const timer=setTimeout(()=>{ctrl.abort();reject(new Error('proxy timeout'));},12000);
+      fetch(url,{signal:ctrl.signal})
+        .then(r=>{if(!r.ok)throw new Error(`HTTP ${r.status}`);return unwrap(r);})
+        .then(json=>{
+          clearTimeout(timer);
+          const c=_parse(json);
+          if(c!==null)resolve(c);
+          else reject(new Error('proxy parse fail'));
+        })
+        .catch(e=>{clearTimeout(timer);reject(e);});
+    });
+  }
+
+  // ── Гонка источников ─────────────────────
+  // Все стартуют одновременно — побеждает первый валидный
+  function _race(sources){
+    return new Promise((resolve,reject)=>{
+      let done=false,errs=0;
+      const total=sources.length;
+      sources.forEach(fn=>{
+        fn()
+          .then(data=>{if(!done){done=true;resolve(data);}})
+          .catch(()=>{if(!done&&++errs>=total)reject(new Error('Все источники недоступны. Проверьте интернет-соединение'));});
+      });
+    });
+  }
+
+  // ── Парсинг ответа MOEX ISS ───────────────
+  function _parse(json){
+    // JSONP оборачивает в массив [{...cursor...},{candles:{...}}]
+    let cols,data;
+    if(Array.isArray(json)){
+      const blk=json.find(b=>b&&b.candles);
+      if(blk){cols=blk.candles.columns;data=blk.candles.data;}
+    }else{
+      cols=json?.candles?.columns;
+      data=json?.candles?.data;
+    }
+    if(!Array.isArray(cols)||!Array.isArray(data))return null;
+    if(!data.length)return[];
+    const iO=cols.indexOf('open'),iC=cols.indexOf('close');
+    const iH=cols.indexOf('high'),iL=cols.indexOf('low'),iT=cols.indexOf('begin');
+    if(iO<0||iC<0||iH<0||iL<0||iT<0)return null;
+    return data.map(r=>({
+      t:_ts(r[iT]),o:+r[iO],h:+r[iH],l:+r[iL],c:+r[iC]
+    })).filter(b=>b.t>0&&b.o>0&&b.c>0&&isFinite(b.h)&&b.h>=b.l);
+  }
+
+  // "2024-01-15 10:00:00" → ms (Moscow UTC+3)
+  function _ts(s){
+    if(!s)return 0;
+    try{return new Date(String(s).replace(' ','T')+'+03:00').getTime();}
+    catch(_){return 0;}
+  }
+
+  // ── Спред A/B (как в TradingView) ─────────
+  function _buildSpread(cA,cB){
+    if(!cA.length||!cB.length)return[];
+    const mapB=new Map(cB.map(c=>[c.t,c]));
+    const res=[];
+    for(const a of cA){
+      const b=mapB.get(a.t);
+      if(!b||b.l<=0||b.h<=0)continue;
+      const o=a.o/b.o,c=a.c/b.c;
+      const h=Math.max(a.h/b.l,o,c),l=Math.min(a.l/b.h,o,c);
+      if(!isFinite(o)||!isFinite(c)||h<l)continue;
+      res.push({t:a.t,o,h,l,c});
+    }
+    return res.slice(-CFG.maxBars);
+  }
+
+  function _clearPoll(key){if(_polls[key]){clearInterval(_polls[key]);delete _polls[key];}}
+
+  return{fetchPair,stopAll};
+})();
+
+// ════════════════════════════════════════════
+// CHART RENDERER
+// ════════════════════════════════════════════
+const Chart=(()=>{
+  let _cv,_ctx,_raf;
+  let _candles=[],_tf='1d',_offset=0;
+  let _drag=false,_dx=0,_doff=0,_mx=-1,_my=-1;
+
+  const BULL='#26a69a',BEAR='#ef5350';
+  const BULL_B='rgba(38,166,154,.78)',BEAR_B='rgba(239,83,80,.85)';
+  const GRID='rgba(18,25,42,.9)';
+  const MA_COL='rgba(255,167,38,.85)';
+
+  function init(cv){
+    _cv=cv;_ctx=cv.getContext('2d');
+    new ResizeObserver(_resize).observe(cv.parentElement);
+    _resize();
+    cv.addEventListener('mousedown',_md);
+    cv.addEventListener('mousemove',_mm);
+    cv.addEventListener('mouseup',_mu);
+    cv.addEventListener('mouseleave',_ml);
+    cv.addEventListener('wheel',_mw,{passive:true});
+    cv.addEventListener('touchstart',_ts,{passive:true});
+    cv.addEventListener('touchmove',_tm,{passive:true});
+    cv.addEventListener('touchend',_mu);
+  }
+
+  function _resize(){
+    if(!_cv)return;
+    const dpr=window.devicePixelRatio||1;
+    const w=_cv.parentElement.clientWidth,h=_cv.parentElement.clientHeight;
+    _cv.width=w*dpr;_cv.height=h*dpr;
+    _cv.style.width=w+'px';_cv.style.height=h+'px';
+    _ctx.setTransform(1,0,0,1,0,0);
+    _ctx.scale(dpr,dpr);
+  }
+
+  function load(candles,tf){_candles=candles||[];_tf=tf||'1d';_offset=0;start();}
+  function start(){stop();const loop=()=>{_draw();_raf=requestAnimationFrame(loop);};_raf=requestAnimationFrame(loop);}
+  function stop(){if(_raf){cancelAnimationFrame(_raf);_raf=null;}}
+
+  // ── DRAW ──────────────────────────────────
+
+  function _draw(){
+    if(!_cv||!_ctx||!_candles.length)return;
+    const dpr=window.devicePixelRatio||1;
+    const W=_cv.width/dpr,H=_cv.height/dpr;
+    const ctx=_ctx,LW=CFG.lw,CW=CFG.cw,STEP=CW+CFG.gap,drawW=W-LW;
+
+    ctx.clearRect(0,0,W,H);
+
+    const visN=Math.floor(drawW/STEP);
+    const endI=Math.max(visN,_candles.length-_offset);
+    const stI=Math.max(0,endI-visN);
+    const slice=_candles.slice(stI,Math.min(endI,_candles.length));
+    if(!slice.length)return;
+
+    // Индикаторы (по всему массиву)
+    const closes=_candles.map(c=>c.c);
+    const bbAll=IND.bb?bollinger(closes,20,[2,3,4]):null;
+    const maAll=IND.ma?sma(closes,200):null;
+    const bbS=bbAll?bbAll.slice(stI,Math.min(endI,_candles.length)):null;
+    const maS=maAll?maAll.slice(stI,Math.min(endI,_candles.length)):null;
+
+    // Диапазон цен
+    let lo=Infinity,hi=-Infinity;
+    slice.forEach(c=>{if(c.h>hi)hi=c.h;if(c.l<lo)lo=c.l;});
+    if(bbS)bbS.forEach(b=>{if(!b)return;if(b.u4>hi)hi=b.u4;if(b.l4<lo)lo=b.l4;});
+    if(maS)maS.forEach(m=>{if(m!=null){if(m>hi)hi=m;if(m<lo)lo=m;}});
+    const rng=hi-lo||hi*0.01,pad=rng*0.1;
+    lo-=pad;hi+=pad;
+    if(hi<=lo)return;
+
+    const toY=p=>H-((p-lo)/(hi-lo))*H;
+    const toP=y=>lo+(1-y/H)*(hi-lo);
+
+    // Сетка
+    _drawGrid(ctx,W,H,drawW,lo,hi,toY);
+
+    // Bollinger
+    if(IND.bb&&bbS)_drawBB(ctx,bbS,STEP,CW,toY,drawW);
+
+    // MA 200
+    if(IND.ma&&maS)_drawLine(ctx,maS,STEP,CW,toY,drawW,MA_COL,1.5,0.9);
+
+    // Свечи
+    ctx.globalAlpha=1;
+    for(let i=0;i<slice.length;i++){
+      const c=slice[i],x=i*STEP+Math.floor(CW/2);
+      if(x>drawW)break;
+      const up=c.c>=c.o,col=up?BULL:BEAR;
+      const yH=toY(c.h),yL=toY(c.l),yO=toY(c.o),yC=toY(c.c);
+      const bT=Math.min(yO,yC),bH=Math.max(1,Math.abs(yO-yC));
+      ctx.strokeStyle=col;ctx.lineWidth=1;ctx.globalAlpha=.65;
+      ctx.beginPath();ctx.moveTo(x,yH);ctx.lineTo(x,yL);ctx.stroke();
+      ctx.fillStyle=up?BULL_B:BEAR_B;ctx.globalAlpha=1;
+      ctx.fillRect(x-Math.floor(CW/2),bT,CW,bH);
+      if(up){ctx.strokeStyle=BULL;ctx.lineWidth=.7;ctx.globalAlpha=.35;ctx.strokeRect(x-Math.floor(CW/2),bT,CW,bH);}
+      ctx.globalAlpha=1;
+    }
+
+    // Текущая цена
+    if(_offset===0&&_candles.length){
+      const last=_candles[_candles.length-1],py=toY(last.c);
+      if(py>=0&&py<=H){
+        const col=last.c>=last.o?BULL:BEAR;
+        ctx.setLineDash([3,4]);ctx.strokeStyle=col+'60';ctx.lineWidth=1;
+        ctx.beginPath();ctx.moveTo(0,py);ctx.lineTo(drawW,py);ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle=col+'18';ctx.fillRect(drawW+1,py-10,LW-2,20);
+        ctx.strokeStyle=col+'99';ctx.lineWidth=.8;ctx.strokeRect(drawW+1,py-10,LW-2,20);
+        ctx.fillStyle=col;ctx.font='700 9px JetBrains Mono,monospace';ctx.textAlign='left';
+        ctx.fillText(fmt(last.c),drawW+4,py+3);
+      }
+    }
+
+    // Временная ось
+    ctx.fillStyle='rgba(107,143,168,.4)';ctx.font='9px JetBrains Mono,monospace';ctx.textAlign='left';
+    const every=Math.max(1,Math.floor(65/STEP));
+    for(let i=0;i<slice.length;i++){
+      if(i%every!==0)continue;
+      const x=i*STEP;if(x>drawW-24)continue;
+      ctx.fillText(fmtDate(slice[i].t,_tf),x+2,H-3);
+    }
+
+    // Легенда
+    _drawLegend(ctx,bbS,maS);
+
+    // Crosshair
+    if(_mx>=0&&_mx<=drawW&&_my>=0&&_my<=H){
+      ctx.strokeStyle='rgba(107,143,168,.28)';ctx.lineWidth=1;ctx.setLineDash([3,3]);
+      ctx.beginPath();ctx.moveTo(_mx,0);ctx.lineTo(_mx,H);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(0,_my);ctx.lineTo(drawW,_my);ctx.stroke();
+      ctx.setLineDash([]);
+      // Y-метка
+      const hp=toP(_my);
+      ctx.fillStyle='rgba(18,23,38,.95)';ctx.fillRect(drawW+1,_my-10,LW-2,20);
+      ctx.strokeStyle='rgba(107,143,168,.35)';ctx.lineWidth=.8;ctx.strokeRect(drawW+1,_my-10,LW-2,20);
+      ctx.fillStyle='rgba(197,216,232,.8)';ctx.font='9px JetBrains Mono,monospace';
+      ctx.fillText(fmt(hp),drawW+4,_my+3);
+      // OHLC свечи
+      const ci=Math.floor(_mx/STEP);
+      if(ci>=0&&ci<slice.length){
+        _updateOHLC(slice[ci]);
+        _showTip(slice[ci],bbS?bbS[ci]:null,maS?maS[ci]:null,_mx+14,_my-10,drawW,W);
+      }
+    }else{_hideTip();_hideOHLC();}
+  }
+
+  function _drawGrid(ctx,W,H,drawW,lo,hi,toY){
+    const steps=8,step=(hi-lo)/steps;
+    ctx.strokeStyle=GRID;ctx.lineWidth=1;
+    ctx.fillStyle='rgba(107,143,168,.38)';ctx.font='9px JetBrains Mono,monospace';ctx.textAlign='left';
+    for(let i=0;i<=steps;i++){
+      const p=lo+step*i,y=toY(p);
+      ctx.globalAlpha=.5;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(drawW,y);ctx.stroke();
+      ctx.globalAlpha=1;ctx.fillText(fmt(p),drawW+3,y+3);
+    }
+    // Паритет 1.0
+    if(lo<1.0&&hi>1.0){
+      const y1=toY(1.0);
+      ctx.strokeStyle='rgba(107,143,168,.18)';ctx.setLineDash([5,4]);
+      ctx.beginPath();ctx.moveTo(0,y1);ctx.lineTo(drawW,y1);ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle='rgba(197,216,232,.3)';ctx.fillText('1.000',drawW+3,y1+3);
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function _drawBB(ctx,bbS,STEP,CW,toY,drawW){
+    // 3 уровня: 4σ→красный, 3σ→синий, 2σ→фиолетовый
+    const levels=[
+      {k:4,fill:'rgba(239,83,80,.03)',  stroke:'rgba(239,83,80,.4)',  lw:1  },
+      {k:3,fill:'rgba(66,165,245,.04)', stroke:'rgba(66,165,245,.45)',lw:1  },
+      {k:2,fill:'rgba(171,71,188,.06)', stroke:'rgba(171,71,188,.6)', lw:1.2},
+    ];
+    for(const{k,fill,stroke,lw}of levels){
+      const uk=`u${k}`,lk=`l${k}`;
+      // Заливка
+      ctx.beginPath();let f=true;
+      for(let i=0;i<bbS.length;i++){
+        if(!bbS[i])continue;
+        const x=i*STEP+Math.floor(CW/2);if(x>drawW)break;
+        f?ctx.moveTo(x,toY(bbS[i][uk])):ctx.lineTo(x,toY(bbS[i][uk]));f=false;
+      }
+      for(let i=bbS.length-1;i>=0;i--){
+        if(!bbS[i])continue;
+        const x=i*STEP+Math.floor(CW/2);if(x>drawW)break;
+        ctx.lineTo(x,toY(bbS[i][lk]));
+      }
+      ctx.closePath();ctx.fillStyle=fill;ctx.fill();
+      // Верхняя линия
+      f=true;ctx.beginPath();
+      for(let i=0;i<bbS.length;i++){
+        if(!bbS[i])continue;
+        const x=i*STEP+Math.floor(CW/2);if(x>drawW)break;
+        f?ctx.moveTo(x,toY(bbS[i][uk])):ctx.lineTo(x,toY(bbS[i][uk]));f=false;
+      }
+      ctx.strokeStyle=stroke;ctx.lineWidth=lw;ctx.globalAlpha=.85;ctx.stroke();
+      // Нижняя линия
+      f=true;ctx.beginPath();
+      for(let i=0;i<bbS.length;i++){
+        if(!bbS[i])continue;
+        const x=i*STEP+Math.floor(CW/2);if(x>drawW)break;
+        f?ctx.moveTo(x,toY(bbS[i][lk])):ctx.lineTo(x,toY(bbS[i][lk]));f=false;
+      }
+      ctx.stroke();ctx.globalAlpha=1;
+    }
+    // Средняя линия SMA20
+    let f=true;ctx.beginPath();
+    for(let i=0;i<bbS.length;i++){
+      if(!bbS[i])continue;
+      const x=i*STEP+Math.floor(CW/2);if(x>drawW)break;
+      f?ctx.moveTo(x,toY(bbS[i].mid)):ctx.lineTo(x,toY(bbS[i].mid));f=false;
+    }
+    ctx.strokeStyle='rgba(171,71,188,.45)';ctx.lineWidth=1;ctx.setLineDash([4,3]);
+    ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1;
+  }
+
+  function _drawLine(ctx,vals,STEP,CW,toY,drawW,color,lw,alpha){
+    ctx.beginPath();let f=true;
+    for(let i=0;i<vals.length;i++){
+      if(vals[i]==null){f=true;continue;}
+      const x=i*STEP+Math.floor(CW/2);if(x>drawW)break;
+      f?ctx.moveTo(x,toY(vals[i])):ctx.lineTo(x,toY(vals[i]));f=false;
+    }
+    ctx.strokeStyle=color;ctx.lineWidth=lw;ctx.globalAlpha=alpha;ctx.stroke();ctx.globalAlpha=1;
+  }
+
+  function _drawLegend(ctx,bbS,maS){
+    ctx.font='9px JetBrains Mono,monospace';ctx.textAlign='left';
+    let y=14;
+    if(IND.ma&&maS){
+      const last=[...maS].reverse().find(v=>v!=null);
+      ctx.fillStyle='rgba(255,167,38,.65)';ctx.globalAlpha=1;
+      ctx.fillText(`MA(200) ${last?fmt(last):'—'}`,8,y);y+=13;
+    }
+    if(IND.bb&&bbS){
+      const last=[...bbS].reverse().find(v=>v!=null);
+      if(last){
+        ctx.fillStyle='rgba(171,71,188,.65)';ctx.fillText(`BB2σ ${fmt(last.l2)} – ${fmt(last.u2)}`,8,y);y+=13;
+        ctx.fillStyle='rgba(66,165,245,.65)';ctx.fillText(`BB3σ ${fmt(last.l3)} – ${fmt(last.u3)}`,8,y);y+=13;
+        ctx.fillStyle='rgba(239,83,80,.65)';ctx.fillText(`BB4σ ${fmt(last.l4)} – ${fmt(last.u4)}`,8,y);
+      }
+    }
+    ctx.globalAlpha=1;
+  }
+
+  // ── Mouse/Touch ───────────────────────────
+  function _md(e){if(e.button!==0)return;_drag=true;_dx=e.clientX;_doff=_offset;_cv.style.cursor='grabbing';}
+  function _mm(e){
+    const r=_cv.getBoundingClientRect();_mx=e.clientX-r.left;_my=e.clientY-r.top;
+    if(!_drag)return;
+    _offset=Math.max(0,Math.min(_candles.length-10,_doff-Math.round((e.clientX-_dx)/(CFG.cw+CFG.gap))));
+  }
+  function _mu(){_drag=false;_cv.style.cursor='crosshair';}
+  function _ml(){_drag=false;_mx=-1;_my=-1;_hideTip();_hideOHLC();}
+  function _mw(e){
+    const d=Math.sign(e.deltaY)*Math.max(1,Math.round(Math.abs(e.deltaY)/40));
+    _offset=Math.max(0,Math.min(_candles.length-10,_offset+d));
+  }
+  function _ts(e){if(e.touches.length!==1)return;_drag=true;_dx=e.touches[0].clientX;_doff=_offset;}
+  function _tm(e){
+    if(!_drag||e.touches.length!==1)return;
+    _offset=Math.max(0,Math.min(_candles.length-10,_doff-Math.round((e.touches[0].clientX-_dx)/(CFG.cw+CFG.gap))));
+  }
+
+  return{init,load,stop};
+})();
+
+// ════════════════════════════════════════════
+// UI HELPERS
+// ════════════════════════════════════════════
+const $=id=>document.getElementById(id);
+
+function toggleInd(k){
+  IND[k]=!IND[k];
+  $(k==='ma'?'btnMA':'btnBB').classList.toggle('on',IND[k]);
+}
+
+function _updateOHLC(c){
+  $('ohlcBar').style.display='flex';
+  const up=c.c>=c.o,cl=up?'up':'dn',chg=(c.c-c.o)/c.o*100;
+  $('oO').textContent=fmt(c.o);$('oO').className='ov';
+  $('oH').textContent=fmt(c.h);$('oH').className='ov';
+  $('oL').textContent=fmt(c.l);$('oL').className='ov';
+  $('oC').textContent=fmt(c.c);$('oC').className='ov '+cl;
+  $('oCh').textContent=(up?'+':'')+chg.toFixed(3)+'%';$('oCh').className='ov '+cl;
+}
+function _hideOHLC(){$('ohlcBar').style.display='none';}
+
+function _showTip(c,bb,ma,x,y,drawW,W){
+  const tip=$('tip');
+  const up=c.c>=c.o,col=up?'#26a69a':'#ef5350',chg=(c.c-c.o)/c.o*100;
+  let h=`<span style="color:${col}">●</span> О<b>${fmt(c.o)}</b> В<b>${fmt(c.h)}</b> Н<b>${fmt(c.l)}</b> З<b style="color:${col}">${fmt(c.c)}</b> <span style="color:${col}">${up?'▲+':'▼'}${Math.abs(chg).toFixed(3)}%</span>`;
+  if(ma!=null)h+=` <span style="color:#ffa726">MA:${fmt(ma)}</span>`;
+  if(bb)h+=` <span style="color:rgba(171,71,188,.8)">2σ:[${fmt(bb.l2)}–${fmt(bb.u2)}]</span>`;
+  tip.innerHTML=h;
+  tip.style.display='block';
+  const tw=tip.offsetWidth+20;
+  tip.style.left=(x+tw>W-80?x-tw:x)+'px';
+  tip.style.top=Math.max(4,y)+'px';
+}
+function _hideTip(){$('tip').style.display='none';}
+
+function setStatus(s){
+  $('dot').className='dot '+s;
+  $('stxt').textContent={loading:'ЗАГРУЗКА...',poll:'LIVE',off:'OFFLINE',err:'ОШИБКА'}[s]||s;
+}
+
+function showOverlay(msg){
+  const el=$('overlay');el.classList.remove('gone');
+  el.innerHTML=msg
+    ?`<div class="spin"></div><div class="ovr-msg">${msg}</div>`
+    :`<div class="ovr-title">SPREAD ARB</div><div class="ovr-hint">← Выберите пару из списка</div>`;
+}
+function hideOverlay(){$('overlay').classList.add('gone');}
+
+function showErr(msg){
+  const el=$('errBox');el.innerHTML='⚠ '+msg;el.style.display='block';
+  setTimeout(()=>el.style.display='none',10000);
+}
+
+function updateDisplay(candles,symA,symB,tf){
+  if(!candles.length)return;
+  const last=candles[candles.length-1],first=candles[0];
+  const chg=(last.c-first.c)/first.c*100,up=last.c>=last.o;
+  $('dA').textContent=symA;$('dB').textContent=symB;
+  $('dTF').textContent=`· ${TF[tf]?.label||tf} · MOEX`;
+  const n=$('snum');n.textContent=fmt(last.c);n.className='snum '+(up?'up':'dn');
+  const ch=$('schg');ch.textContent=(up?'▲ +':'▼ ')+Math.abs(chg).toFixed(2)+'%';ch.className='schg '+(up?'up':'dn');
+}
+
+// ════════════════════════════════════════════
+// СПИСОК ПАР
+// ════════════════════════════════════════════
+let _actIdx=-1,_curTF='1d';
+
+function buildPairList(){
+  $('sbCnt').textContent=PAIRS.length+' пар';
+  $('pairList').innerHTML=PAIRS.map((p,i)=>`
+    <div class="pair-row" id="pr_${i}" onclick="loadPair(${i})">
+      <span class="pname">${p[0]}<span class="s">/</span>${p[1]}</span>
+      <span class="pval" id="pv_${i}">—</span>
+      <span class="ppct" id="pp_${i}"></span>
+    </div>`).join('');
+}
+
+function _setActive(idx){
+  if(_actIdx>=0)$(`pr_${_actIdx}`)?.classList.remove('act');
+  _actIdx=idx;
+  if(idx>=0)$(`pr_${idx}`)?.classList.add('act');
+}
+
+function _updateRow(idx,candles){
+  if(!candles.length||idx<0)return;
+  const last=candles[candles.length-1];
+  const prev=candles[Math.max(0,candles.length-6)];
+  const chg=(last.c-prev.c)/prev.c*100,up=last.c>=last.o;
+  const v=$(`pv_${idx}`),p=$(`pp_${idx}`);
+  if(v){v.textContent=fmt(last.c);v.className='pval '+(up?'up':'dn');}
+  if(p){p.textContent=(up?'+':'')+chg.toFixed(2)+'%';p.className='ppct '+(up?'up':'dn');}
+}
+
+async function loadPair(idx){
+  const pair=PAIRS[idx];if(!pair)return;
+  _setActive(idx);
+  showOverlay(`Загрузка ${pair[0]} / ${pair[1]}…`);
+  setStatus('loading');
+  Loader.stopAll();
+  try{
+    await Loader.fetchPair(pair[0],pair[1],_curTF,(candles,a,b,tf)=>{
+      hideOverlay();Chart.load(candles,tf);updateDisplay(candles,a,b,tf);_updateRow(idx,candles);
+    },setStatus);
+  }catch(e){
+    hideOverlay();
+    showErr(`${pair[0]}/${pair[1]}: ${e.message||'Ошибка загрузки'}`);
+    setStatus('err');
+  }
+}
+
+async function loadCustom(){
+  const a=$('inpA').value.trim().toUpperCase(),b=$('inpB').value.trim().toUpperCase();
+  if(!a||!b)return;
+  _setActive(-1);
+  showOverlay(`Загрузка ${a} / ${b}…`);setStatus('loading');Loader.stopAll();
+  try{
+    await Loader.fetchPair(a,b,_curTF,(candles,sa,sb,tf)=>{
+      hideOverlay();Chart.load(candles,tf);updateDisplay(candles,sa,sb,tf);
+    },setStatus);
+  }catch(e){
+    hideOverlay();showErr(`${a}/${b}: ${e.message||'Ошибка'}`);setStatus('err');
+  }
+}
+
+function setTF(tf){
+  _curTF=tf;
+  document.querySelectorAll('.tf-btn').forEach(b=>b.classList.toggle('act',b.dataset.tf===tf));
+  if(_actIdx>=0)loadPair(_actIdx);
+  else{
+    const a=$('dA').textContent,b=$('dB').textContent;
+    if(a!=='—'&&b!=='—'){$('inpA').value=a;$('inpB').value=b;loadCustom();}
+  }
+}
+
+// ════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded',()=>{
+  Chart.init($('cvs'));
+  buildPairList();
+  document.querySelectorAll('.tf-btn').forEach(b=>b.addEventListener('click',()=>setTF(b.dataset.tf)));
+  $('btnGo').addEventListener('click',loadCustom);
+  $('inpA').addEventListener('keydown',e=>{if(e.key==='Enter')loadCustom();});
+  $('inpB').addEventListener('keydown',e=>{if(e.key==='Enter')loadCustom();});
+  // Загружаем SBER/SBERP по умолчанию
+  loadPair(0);
+});
+</script>
+</body>
+</html>
