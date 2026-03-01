@@ -294,15 +294,27 @@ function fmtDate(ms,tf){
 }
 function today(){return new Date().toISOString().slice(0,10)}
 function daysAgo(n){const d=new Date();d.setDate(d.getDate()-n);return d.toISOString().slice(0,10)}
-function aggregate(arr,n){
+function aggregate(arr,n,baseMinutes=1){
   if(!n||n<=1)return arr;
-  const r=[];
-  for(let i=0;i<arr.length;i+=n){
-    const c=arr.slice(i,i+n);
-    if(!c.length)continue;
-    r.push({t:c[0].t,o:c[0].o,h:Math.max(...c.map(x=>x.h)),l:Math.min(...c.map(x=>x.l)),c:c[c.length-1].c});
+  const bucketMs=Math.max(1,n*baseMinutes)*60000;
+  const out=[];
+  let cur=null,curBucket=-1;
+
+  for(const bar of arr){
+    const bucket=Math.floor(bar.t/bucketMs);
+    if(bucket!==curBucket){
+      if(cur)out.push(cur);
+      curBucket=bucket;
+      cur={t:bucket*bucketMs,o:bar.o,h:bar.h,l:bar.l,c:bar.c};
+      continue;
+    }
+    if(bar.h>cur.h)cur.h=bar.h;
+    if(bar.l<cur.l)cur.l=bar.l;
+    cur.c=bar.c;
   }
-  return r;
+
+  if(cur)out.push(cur);
+  return out;
 }
 function sma(data,period){
   const out=new Array(data.length).fill(null);
@@ -387,21 +399,25 @@ const Loader = (() => {
   }
 
   async function _loadSym(sym,tfc){
-    let raw=await _moexFetchAll(sym,tfc.moex,daysAgo(tfc.days),today());
-    if(tfc.agg&&tfc.agg>1)raw=aggregate(raw,tfc.agg);
+    const rawNeed=Math.max(CFG.maxBars*(tfc.agg||1),CFG.maxBars);
+    let raw=await _moexFetchAll(sym,tfc.moex,daysAgo(tfc.days),today(),rawNeed);
+    if(tfc.agg&&tfc.agg>1)raw=aggregate(raw,tfc.agg,tfc.moex);
     return raw.slice(-CFG.maxBars);
   }
 
   // ── MOEX ISS с пагинацией ─────────────────
 
-  async function _moexFetchAll(sym,interval,from,till){
+  async function _moexFetchAll(sym,interval,from,till,needBars=CFG.maxBars){
     const PAGE=500;
+    const MAX_PAGES=30;
     let all=[],start=0;
-    for(let p=0;p<5;p++){
+    for(let p=0;p<MAX_PAGES;p++){
       const batch=await _fetchPage(sym,interval,from,till,start);
       if(!batch||!batch.length)break;
       all=all.concat(batch);
+      if(all.length>needBars*3)all=all.slice(-needBars*2);
       if(batch.length<PAGE)break;
+      if(all.length>=needBars&&p>=2)break;
       start+=PAGE;
     }
     const seen=new Set();
